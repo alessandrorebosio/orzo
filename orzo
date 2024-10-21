@@ -2,14 +2,18 @@
 
 # Help function to display usage information
 function help() {
-    echo -e "\nUsage: orzo COMMAND CONTAINER"
+    echo -e "\nUsage: orzo [OPTION] COMMAND [CONTAINER_FOLDER or FOLDER_PATH]"
+    echo -e "\nOptions:"
+    echo -e "  -f FOLDER_PATH                                       Specify the folder path of the container instead of the container name."
+    echo -e "  -a FOLDER_PATH                                       Execute the command in all subdirectories of the specified folder."
     echo -e "\nCommands:"
-    echo -e "  create                               Create and start the container."
-    echo -e "  remove                               Stop and remove the container."
-    echo -e "  restart                              Restart the container."
-    echo -e "  update                               Update the container."
-    echo -e "  clean                                Clean unused downloaded images of Docker."
-    echo -e "\nWARNING: The container name must be located within the /opt directory."
+    echo -e "  setup    CONTAINER_FOLDER                            Set the folder for the container. (Don't use with -a flag)"
+    echo -e "  create   CONTAINER_FOLDER                            Create and start the specified container."
+    echo -e "  remove   CONTAINER_FOLDER                            Stop and remove the specified container."
+    echo -e "  restart  CONTAINER_FOLDER                            Restart the specified container."
+    echo -e "  update   CONTAINER_FOLDER                            Update the specified container with the latest image."
+    echo -e "  clean    CONTAINER_FOLDER                            Clean up unused Docker images."
+    echo -e "\nNOTE: You can specify any valid folder path with the -f option."
 }
 
 # Function to check if Docker is installed
@@ -30,19 +34,34 @@ function check_docker_compose() {
 
 # Function to execute commands based on the input
 function execute() {
+    local dir=${1}
     cd "${dir}" 2>/dev/null
     case ${command} in
-        create) docker compose up -d
+        setup)
+            mkdir -p ${dir} && touch "${dir}/docker-compose.yml" "${dir}/.env"
             ;;
-        remove) docker compose down
+        create)
+            docker compose up -d
             ;;
-        restart) docker compose restart
+        remove)
+            docker compose down
             ;;
-        update) docker compose pull && docker compose up -d
+        restart)
+            docker compose restart
             ;;
-        clean) docker image prune -f
+        update)
+            read -p "Have you checked the GitHub repository for changes? Confirm update (y/n): " confirm
+            if [[ "$confirm" =~ ^[yY]|[yY][eE][sS]$ ]]; then
+                docker compose pull && docker compose up -d
+            else
+                echo -e "Aborting..."
+            fi 
             ;;
-        *) echo -e "ERROR: '${command}' is not a recognized command."
+        clean)
+            docker image prune -f
+            ;;
+        *)
+            echo -e "ERROR: '${command}' is not a recognized command."
             exit 1
             ;;
     esac
@@ -51,13 +70,41 @@ function execute() {
 # Check for no arguments or --help
 [[ $# -lt 1 || "$1" == "--help" ]] && { help; exit 0; }
 
-# Define command and container directory
-command=${1}
+# Define container directory
 dir="/opt/${2}"
+
+# Handle flags and set the directory path
+while getopts "haf" opt; do
+    dir=${3}
+    case ${opt} in
+        h)
+            help
+            exit 0
+            ;;
+        a)
+            command=${2}
+            [[ ${command} == "setup" ]] && { echo -e "ERROR: You can't use setup with -a flag."; exit 0; }
+            dir=${3:-"/opt/"}
+            for sub in "${dir}"/*/; do
+                if [[ -d "$sub" ]]; then
+                    execute "$sub"
+                fi
+            done
+            exit 0
+            ;;
+        \?)
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# Define command
+command=${1}
 
 # Check if Docker and Docker Compose are installed
 check_docker
 check_docker_compose
 
 # Execute the command
-execute
+execute ${dir}
