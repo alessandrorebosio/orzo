@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Help function to display usage information
+function help() {
+    echo -e "\nUsage: orzo COMMAND CONTAINER"
+    echo -e "\nCommands:"
+    echo -e "  create                               Create and start the container."
+    echo -e "  remove                               Stop and remove the container."
+    echo -e "  restart                              Restart the container."
+    echo -e "  update                               Update the container."
+    echo -e "  clean                                Clean unused downloaded images of Docker."
+    echo -e "\nWARNING: The container name must be located within the /opt directory."
+}
+
+# Function to check if Docker is installed
+function check_docker() {
+    if ! command -v docker &> /dev/null; then
+        echo -e "Error: Docker is not installed. Please install Docker and try again."
+        exit 1
+    fi
+}
+
+# Function to check if Docker Compose is installed
+function check_docker_compose() {
+    if ! command -v docker compose &> /dev/null; then
+        echo -e "Error: Docker Compose is not installed. Please install Docker Compose and try again."
+        exit 1
+    fi
+}
+
+# Function to execute commands based on the input
+function execute() {
+    cd "${dir}" 2>/dev/null
+    case ${command} in
+        create) docker compose up -d
+            ;;
+        remove) docker compose down
+            ;;
+        restart) docker compose restart
+            ;;
+        update) docker compose pull && docker compose up -d
+            ;;
+        clean) docker image prune -f
+            ;;
+        *) echo -e "ERROR: '${command}' is not a recognized command."
+            exit 1
+            ;;
+    esac
+}
+
+# Check for no arguments or --help
+[[ $# -lt 1 || "$1" == "--help" ]] && { help; exit 0; }
+
+# Define command and container directory
+command=${1}
+dir="/opt/${2}"
+
+# Check if Docker and Docker Compose are installed
+check_docker
+check_docker_compose
+
+# Execute the command
+execute
